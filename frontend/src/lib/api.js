@@ -8,6 +8,9 @@ export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
 export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
 
+// ✅ Alias para compatibilidad con imports antiguos
+export const removeToken = clearToken;
+
 // ---------------------
 // Utils
 // ---------------------
@@ -38,7 +41,9 @@ export async function request(
   const headers = { Accept: "application/json", ...(extraHeaders || {}) };
   const isForm = body instanceof FormData;
 
-  if (body !== undefined && body !== null && !isForm) headers["Content-Type"] = "application/json";
+  if (body !== undefined && body !== null && !isForm) {
+    headers["Content-Type"] = "application/json";
+  }
 
   if (auth) {
     const token = getToken();
@@ -83,7 +88,7 @@ export async function request(
 }
 
 // ---------------------
-// Auth (tu backend devuelve token en data.token)
+// Auth (tu backend devuelve token en data.token / data.data.token)
 // ---------------------
 export async function login(email, password) {
   const data = await request("/auth/login", {
@@ -134,25 +139,30 @@ export async function listProviders(
 export async function createProvider(payload) {
   return request("/providers", { method: "POST", body: payload });
 }
+
 export async function updateProvider(id, payload) {
   return request(`/providers/${id}`, { method: "PUT", body: payload });
 }
+
 export async function deleteProvider(id) {
   return request(`/providers/${id}`, { method: "DELETE" });
 }
 
 // ---------------------
-// Contacts (si tu backend los tiene)
+// Contacts
 // ---------------------
 export async function listContacts(providerId) {
   return request(`/providers/${providerId}/contacts`, { method: "GET" });
 }
+
 export async function createContact(providerId, payload) {
   return request(`/providers/${providerId}/contacts`, { method: "POST", body: payload });
 }
+
 export async function updateContact(contactId, payload) {
   return request(`/contacts/${contactId}`, { method: "PUT", body: payload });
 }
+
 export async function deleteContact(contactId) {
   return request(`/contacts/${contactId}`, { method: "DELETE" });
 }
