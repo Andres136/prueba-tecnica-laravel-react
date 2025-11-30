@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\RegisterRequest;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -11,40 +12,51 @@ class AuthController extends Controller
 {
     public function login(Request $request)
     {
-        $data = $request->validate([
+        $request->validate([
             'email' => ['required','email'],
-            'password' => ['required','string'],
+            'password' => ['required'],
         ]);
 
-        $user = User::where('email', $data['email'])->first();
+        $user = User::where('email', $request->email)->first();
 
-        if (!$user || !Hash::check($data['password'], $user->password)) {
+        if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json([
                 'status' => false,
                 'message' => 'Credenciales inválidas.',
-                'data' => null,
+                'data' => null
             ], 401);
         }
 
-        $token = $user->createToken('api')->plainTextToken; // Bearer token :contentReference[oaicite:3]{index=3}
+        $token = $user->createToken('auth')->plainTextToken;
 
         return response()->json([
             'status' => true,
             'message' => 'Login exitoso.',
             'data' => [
                 'token' => $token,
-                'user' => $user,
-            ],
+                'user' => $user
+            ]
         ]);
     }
 
-    public function me(Request $request)
+    public function register(RegisterRequest $request)
     {
+        $user = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+        ]);
+
+        $token = $user->createToken('auth')->plainTextToken;
+
         return response()->json([
             'status' => true,
-            'message' => 'Usuario autenticado.',
-            'data' => $request->user(),
-        ]);
+            'message' => 'Registro exitoso.',
+            'data' => [
+                'token' => $token,
+                'user' => $user
+            ]
+        ], 201);
     }
 
     public function logout(Request $request)
@@ -53,8 +65,8 @@ class AuthController extends Controller
 
         return response()->json([
             'status' => true,
-            'message' => 'Logout exitoso.',
-            'data' => null,
+            'message' => 'Sesión cerrada.',
+            'data' => null
         ]);
     }
 }

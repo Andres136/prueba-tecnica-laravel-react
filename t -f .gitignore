@@ -1,0 +1,443 @@
+[1mdiff --git a/backend/app/Http/Controllers/Api/AuthController.php b/backend/app/Http/Controllers/Api/AuthController.php[m
+[1mindex 1ef4a06..8e61690 100644[m
+[1m--- a/backend/app/Http/Controllers/Api/AuthController.php[m
+[1m+++ b/backend/app/Http/Controllers/Api/AuthController.php[m
+[36m@@ -3,6 +3,7 @@[m
+ namespace App\Http\Controllers\Api;[m
+ [m
+ use App\Http\Controllers\Controller;[m
+[32m+[m[32muse App\Http\Requests\RegisterRequest;[m
+ use App\Models\User;[m
+ use Illuminate\Http\Request;[m
+ use Illuminate\Support\Facades\Hash;[m
+[36m@@ -11,40 +12,51 @@[m [mclass AuthController extends Controller[m
+ {[m
+     public function login(Request $request)[m
+     {[m
+[31m-        $data = $request->validate([[m
+[32m+[m[32m        $request->validate([[m
+             'email' => ['required','email'],[m
+[31m-            'password' => ['required','string'],[m
+[32m+[m[32m            'password' => ['required'],[m
+         ]);[m
+ [m
+[31m-        $user = User::where('email', $data['email'])->first();[m
+[32m+[m[32m        $user = User::where('email', $request->email)->first();[m
+ [m
+[31m-        if (!$user || !Hash::check($data['password'], $user->password)) {[m
+[32m+[m[32m        if (!$user || !Hash::check($request->password, $user->password)) {[m
+             return response()->json([[m
+                 'status' => false,[m
+                 'message' => 'Credenciales inválidas.',[m
+[31m-                'data' => null,[m
+[32m+[m[32m                'data' => null[m
+             ], 401);[m
+         }[m
+ [m
+[31m-        $token = $user->createToken('api')->plainTextToken; // Bearer token :contentReference[oaicite:3]{index=3}[m
+[32m+[m[32m        $token = $user->createToken('auth')->plainTextToken;[m
+ [m
+         return response()->json([[m
+             'status' => true,[m
+             'message' => 'Login exitoso.',[m
+             'data' => [[m
+                 'token' => $token,[m
+[31m-                'user' => $user,[m
+[31m-            ],[m
+[32m+[m[32m                'user' => $user[m
+[32m+[m[32m            ][m
+         ]);[m
+     }[m
+ [m
+[31m-    public function me(Request $request)[m
+[32m+[m[32m    public function register(RegisterRequest $request)[m
+     {[m
+[32m+[m[32m        $user = User::create([[m
+[32m+[m[32m            'name' => $request->name,[m
+[32m+[m[32m            'email' => $request->email,[m
+[32m+[m[32m            'password' => Hash::make($request->password),[m
+[32m+[m[32m        ]);[m
+[32m+[m
+[32m+[m[32m        $token = $user->createToken('auth')->plainTextToken;[m
+[32m+[m
+         return response()->json([[m
+             'status' => true,[m
+[31m-            'message' => 'Usuario autenticado.',[m
+[31m-            'data' => $request->user(),[m
+[31m-        ]);[m
+[32m+[m[32m            'message' => 'Registro exitoso.',[m
+[32m+[m[32m            'data' => [[m
+[32m+[m[32m                'token' => $token,[m
+[32m+[m[32m                'user' => $user[m
+[32m+[m[32m            ][m
+[32m+[m[32m        ], 201);[m
+     }[m
+ [m
+     public function logout(Request $request)[m
+[36m@@ -53,8 +65,8 @@[m [mpublic function logout(Request $request)[m
+ [m
+         return response()->json([[m
+             'status' => true,[m
+[31m-            'message' => 'Logout exitoso.',[m
+[31m-            'data' => null,[m
+[32m+[m[32m            'message' => 'Sesión cerrada.',[m
+[32m+[m[32m            'data' => null[m
+         ]);[m
+     }[m
+ }[m
+[1mdiff --git a/backend/app/Http/Controllers/Api/ProviderController.php b/backend/app/Http/Controllers/Api/ProviderController.php[m
+[1mindex b51f34c..0d85785 100644[m
+[1m--- a/backend/app/Http/Controllers/Api/ProviderController.php[m
+[1m+++ b/backend/app/Http/Controllers/Api/ProviderController.php[m
+[36m@@ -11,17 +11,18 @@[m
+ class ProviderController extends Controller[m
+ {[m
+     /**[m
+[31m-     * GET /api/providers[m
+[31m-     * Filtros: ?search=...&status=active|inactive[m
+[32m+[m[32m     * GET /api/providers?page=1&per_page=8&search=...&status=active|inactive[m
+      */[m
+     public function index(Request $request)[m
+     {[m
+[31m-        $search = $request->query('search');[m
+[31m-        $status = $request->query('status');[m
+[32m+[m[32m        $search  = $request->query('search');[m
+[32m+[m[32m        $status  = $request->query('status');[m
+[32m+[m[32m        $perPage = (int) ($request->query('per_page', 10) ?? 10);[m
+[32m+[m[32m        $perPage = max(1, min($perPage, 100)); // límite sano[m
+ [m
+[31m-        $query = Provider::query()->with('contacts');[m
+[32m+[m[32m        $query = Provider::query();[m
+ [m
+[31m-        // Filtro search (name, nit, email, phone)[m
+[32m+[m[32m        // search por nit, name, email, phone[m
+         if ($search) {[m
+             $query->where(function ($q) use ($search) {[m
+                 $q->where('name', 'like', "%{$search}%")[m
+[36m@@ -31,14 +32,14 @@[m [mpublic function index(Request $request)[m
+             });[m
+         }[m
+ [m
+[31m-        // Filtro status[m
+[32m+[m[32m        // status: active|inactive[m
+         if ($status) {[m
+             $query->where('status', $status);[m
+         }[m
+ [m
+         $providers = $query[m
+[31m-            ->orderBy('id', 'desc')[m
+[31m-            ->paginate(10); // Paginación para la tabla del frontend[m
+[32m+[m[32m            ->orderByDesc('id')[m
+[32m+[m[32m            ->paginate($perPage);[m
+ [m
+         return response()->json([[m
+             'status'  => true,[m
+[36m@@ -51,16 +52,15 @@[m [mpublic function index(Request $request)[m
+      * POST /api/providers[m
+      */[m
+     public function store(StoreProviderRequest $request)[m
+[31m-   {[m
+[31m-    $provider = Provider::create($request->validated());[m
+[31m-[m
+[31m-    return response()->json([[m
+[31m-        'status'  => true,[m
+[31m-        'message' => 'Proveedor creado exitosamente.',[m
+[31m-        'data'    => $provider[m
+[31m-    ]);[m
+[31m-    }[m
+[32m+[m[32m    {[m
+[32m+[m[32m        $provider = Provider::create($request->validated());[m
+ [m
+[32m+[m[32m        return response()->json([[m
+[32m+[m[32m            'status'  => true,[m
+[32m+[m[32m            'message' => 'Proveedor creado exitosamente.',[m
+[32m+[m[32m            'data'    => $provider,[m
+[32m+[m[32m        ], 201);[m
+[32m+[m[32m    }[m
+ [m
+     /**[m
+      * GET /api/providers/{provider}[m
+[36m@@ -80,16 +80,15 @@[m [mpublic function show(Provider $provider)[m
+      * PUT/PATCH /api/providers/{provider}[m
+      */[m
+     public function update(UpdateProviderRequest $request, Provider $provider)[m
+[31m-   {[m
+[31m-    $provider->update($request->validated());[m
+[31m-[m
+[31m-    return response()->json([[m
+[31m-        'status'  => true,[m
+[31m-        'message' => 'Proveedor actualizado.',[m
+[31m-        'data'    => $provider[m
+[31m-    ]);[m
+[31m-}[m
+[32m+[m[32m    {[m
+[32m+[m[32m        $provider->update($request->validated());[m
+ [m
+[32m+[m[32m        return response()->json([[m
+[32m+[m[32m            'status'  => true,[m
+[32m+[m[32m            'message' => 'Proveedor actualizado.',[m
+[32m+[m[32m            'data'    => $provider->fresh(), // devuelve lo último[m
+[32m+[m[32m        ]);[m
+[32m+[m[32m    }[m
+ [m
+     /**[m
+      * DELETE /api/providers/{provider}[m
+[36m@@ -105,4 +104,3 @@[m [mpublic function destroy(Provider $provider)[m
+         ]);[m
+     }[m
+ }[m
+[31m-[m
+[1mdiff --git a/backend/app/Http/Controllers/Controller.php b/backend/app/Http/Controllers/Controller.php[m
+[1mindex 8677cd5..19b25b5 100644[m
+[1m--- a/backend/app/Http/Controllers/Controller.php[m
+[1m+++ b/backend/app/Http/Controllers/Controller.php[m
+[36m@@ -6,3 +6,4 @@[m [mabstract class Controller[m
+ {[m
+     //[m
+ }[m
+[41m+[m
+[1mdiff --git a/backend/app/Http/Requests/StoreProviderRequest.php b/backend/app/Http/Requests/StoreProviderRequest.php[m
+[1mindex c94fec5..075fff9 100644[m
+[1m--- a/backend/app/Http/Requests/StoreProviderRequest.php[m
+[1m+++ b/backend/app/Http/Requests/StoreProviderRequest.php[m
+[36m@@ -3,6 +3,7 @@[m
+ namespace App\Http\Requests;[m
+ [m
+ use Illuminate\Foundation\Http\FormRequest;[m
+[32m+[m[32muse Illuminate\Validation\Rule;[m
+ [m
+ class StoreProviderRequest extends FormRequest[m
+ {[m
+[36m@@ -11,15 +12,45 @@[m [mpublic function authorize(): bool[m
+         return true;[m
+     }[m
+ [m
+[32m+[m[32m    protected function prepareForValidation(): void[m
+[32m+[m[32m    {[m
+[32m+[m[32m        $status = $this->input('status');[m
+[32m+[m
+[32m+[m[32m        if (is_string($status)) {[m
+[32m+[m[32m            $s = mb_strtolower(trim($status));[m
+[32m+[m[32m            if ($s === 'activo') $status = 'active';[m
+[32m+[m[32m            if ($s === 'inactivo') $status = 'inactive';[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        $this->merge([[m
+[32m+[m[32m            'nit'     => is_string($this->nit) ? trim($this->nit) : $this->nit,[m
+[32m+[m[32m            'name'    => is_string($this->name) ? trim($this->name) : $this->name,[m
+[32m+[m[32m            'email'   => is_string($this->email) ? trim($this->email) : $this->email,[m
+[32m+[m[32m            'phone'   => is_string($this->phone) ? trim($this->phone) : $this->phone,[m
+[32m+[m[32m            'address' => is_string($this->address) ? trim($this->address) : $this->address,[m
+[32m+[m[32m            'status'  => $status,[m
+[32m+[m[32m        ]);[m
+[32m+[m[32m    }[m
+[32m+[m
+     public function rules(): array[m
+     {[m
+         return [[m
+[31m-            'name'  => 'required|string|max:255',[m
+[31m-            'nit'   => 'required|string|max:50|unique:providers,nit',[m
+[31m-            'email' => 'required|email|unique:providers,email',[m
+[31m-            'phone' => 'nullable|string|max:50',[m
+[31m-            'status'=> 'required|in:active,inactive',[m
+[32m+[m[32m            'nit'     => ['required', 'string', 'max:50', Rule::unique('providers', 'nit')],[m
+[32m+[m[32m            'name'    => ['required', 'string', 'max:255'],[m
+[32m+[m[32m            'email'   => ['nullable', 'email', 'max:255'],[m
+[32m+[m[32m            'phone'   => ['nullable', 'string', 'max:50'],[m
+[32m+[m[32m            'address' => ['nullable', 'string', 'max:255'],[m
+[32m+[m[32m            'status'  => ['required', Rule::in(['active', 'inactive'])],[m
+         ];[m
+     }[m
+[31m-}[m
+ [m
+[32m+[m[32m    public function messages(): array[m
+[32m+[m[32m    {[m
+[32m+[m[32m        return [[m
+[32m+[m[32m            'nit.required'  => 'El NIT es obligatorio.',[m
+[32m+[m[32m            'nit.unique'    => 'Ese NIT ya está registrado.',[m
+[32m+[m[32m            'name.required' => 'El nombre es obligatorio.',[m
+[32m+[m[32m            'status.in'     => 'El estado debe ser active o inactive.',[m
+[32m+[m[32m        ];[m
+[32m+[m[32m    }[m
+[32m+[m[32m}[m
+[1mdiff --git a/backend/app/Http/Requests/UpdateProviderRequest.php b/backend/app/Http/Requests/UpdateProviderRequest.php[m
+[1mindex baa7e14..6c4de08 100644[m
+[1m--- a/backend/app/Http/Requests/UpdateProviderRequest.php[m
+[1m+++ b/backend/app/Http/Requests/UpdateProviderRequest.php[m
+[36m@@ -3,6 +3,7 @@[m
+ namespace App\Http\Requests;[m
+ [m
+ use Illuminate\Foundation\Http\FormRequest;[m
+[32m+[m[32muse Illuminate\Validation\Rule;[m
+ [m
+ class UpdateProviderRequest extends FormRequest[m
+ {[m
+[36m@@ -11,14 +12,66 @@[m [mpublic function authorize(): bool[m
+         return true;[m
+     }[m
+ [m
+[32m+[m[32m    private function providerId(): ?int[m
+[32m+[m[32m    {[m
+[32m+[m[32m        // Soporta: {provider} (apiResource), {id}, o route-model-binding[m
+[32m+[m[32m        $provider = $this->route('provider') ?? $this->route('id');[m
+[32m+[m
+[32m+[m[32m        if (is_object($provider) && isset($provider->id)) {[m
+[32m+[m[32m            return (int) $provider->id;[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        if (is_numeric($provider)) {[m
+[32m+[m[32m            return (int) $provider;[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        // Fallback: si llega en body (no ideal, pero evita romper)[m
+[32m+[m[32m        $id = $this->input('id');[m
+[32m+[m[32m        return is_numeric($id) ? (int) $id : null;[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    protected function prepareForValidation(): void[m
+[32m+[m[32m    {[m
+[32m+[m[32m        // Normaliza status si tu frontend manda "Activo/Inactivo"[m
+[32m+[m[32m        $status = $this->input('status');[m
+[32m+[m
+[32m+[m[32m        if (is_string($status)) {[m
+[32m+[m[32m            $s = mb_strtolower(trim($status));[m
+[32m+[m[32m            if ($s === 'activo') $status = 'active';[m
+[32m+[m[32m            if ($s === 'inactivo') $status = 'inactive';[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        $this->merge([[m
+[32m+[m[32m            'nit'    => is_string($this->nit) ? trim($this->nit) : $this->nit,[m
+[32m+[m[32m            'name'   => is_string($this->name) ? trim($this->name) : $this->name,[m
+[32m+[m[32m            'email'  => is_string($this->email) ? trim($this->email) : $this->email,[m
+[32m+[m[32m            'phone'  => is_string($this->phone) ? trim($this->phone) : $this->phone,[m
+[32m+[m[32m            'address'=> is_string($this->address) ? trim($this->address) : $this->address,[m
+[32m+[m[32m            'status' => $status,[m
+[32m+[m[32m        ]);[m
+[32m+[m[32m    }[m
+[32m+[m
+     public function rules(): array[m
+[32m+[m[32m    {[m
+[32m+[m[32m        $providerId = $this->providerId();[m
+[32m+[m
+[32m+[m[32m        return [[m
+[32m+[m[32m            'nit'     => ['required', 'string', 'max:50', Rule::unique('providers', 'nit')->ignore($providerId)],[m
+[32m+[m[32m            'name'    => ['required', 'string', 'max:255'],[m
+[32m+[m[32m            'email'   => ['nullable', 'email', 'max:255'],[m
+[32m+[m[32m            'phone'   => ['nullable', 'string', 'max:50'],[m
+[32m+[m[32m            'address' => ['nullable', 'string', 'max:255'],[m
+[32m+[m[32m            'status'  => ['required', Rule::in(['active', 'inactive'])],[m
+[32m+[m[32m        ];[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    public function messages(): array[m
+     {[m
+         return [[m
+[31m-            'name'  => 'required|string|max:255',[m
+[31m-            'nit'   => 'required|string|max:50|unique:providers,nit,' . $this->provider,[m
+[31m-            'email' => 'required|email|unique:providers,email,' . $this->provider,[m
+[31m-            'phone' => 'nullable|string|max:50',[m
+[31m-            'status'=> 'required|in:active,inactive',[m
+[32m+[m[32m            'nit.required' => 'El NIT es obligatorio.',[m
+[32m+[m[32m            'nit.unique'   => 'Ese NIT ya está registrado.',[m
+[32m+[m[32m            'name.required'=> 'El nombre es obligatorio.',[m
+[32m+[m[32m            'status.in'    => 'El estado debe ser active o inactive.',[m
+         ];[m
+     }[m
+ }[m
+[1mdiff --git a/backend/database/seeders/DatabaseSeeder.php b/backend/database/seeders/DatabaseSeeder.php[m
+[1mindex 6b901f8..a2b101f 100644[m
+[1m--- a/backend/database/seeders/DatabaseSeeder.php[m
+[1m+++ b/backend/database/seeders/DatabaseSeeder.php[m
+[36m@@ -2,24 +2,35 @@[m
+ [m
+ namespace Database\Seeders;[m
+ [m
+[31m-use App\Models\User;[m
+[31m-use Illuminate\Database\Console\Seeds\WithoutModelEvents;[m
+ use Illuminate\Database\Seeder;[m
+[32m+[m[32muse App\Models\User;[m
+[32m+[m[32muse Illuminate\Support\Facades\Hash;[m
+ [m
+ class DatabaseSeeder extends Seeder[m
+ {[m
+[31m-    use WithoutModelEvents;[m
+[31m-[m
+[31m-    /**[m
+[31m-     * Seed the application's database.[m
+[31m-     */[m
+     public function run(): void[m
+     {[m
+[31m-        // User::factory(10)->create();[m
+[32m+[m[32m        // Admin demo (tu login del frontend)[m
+[32m+[m[32m        User::updateOrCreate([m
+[32m+[m[32m            ['email' => 'admin@demo.com'],[m
+[32m+[m[32m            [[m
+[32m+[m[32m                'name' => 'Admin',[m
+[32m+[m[32m                'password' => Hash::make('12345678'),[m
+[32m+[m[32m            ][m
+[32m+[m[32m        );[m
+[32m+[m
+[32m+[m[32m        // Si también estabas creando este, cámbialo igual o elimínalo[m
+[32m+[m[32m        User::updateOrCreate([m
+[32m+[m[32m            ['email' => 'test@example.com'],[m
+[32m+[m[32m            [[m
+[32m+[m[32m                'name' => 'Test User',[m
+[32m+[m[32m                'password' => Hash::make('password'),[m
+[32m+[m[32m            ][m
+[32m+[m[32m        );[m
+ [m
+[31m-        User::factory()->create([[m
+[31m-            'name' => 'Test User',[m
+[31m-            'email' => 'test@example.com',[m
+[31m-        ]);[m
+[32m+[m[32m        // Opcional: llama otros seeders[m
+[32m+[m[32m        // $this->call([[m
+[32m+[m[32m        //     ProviderSeeder::class,[m
+[32m+[m[32m        // ]);[m
+     }[m
+ }[m
+[1mdiff --git a/backend/routes/api.php b/backend/routes/api.php[m
+[1mindex d1bf98d..bd72227 100644[m
+[1m--- a/backend/routes/api.php[m
+[1m+++ b/backend/routes/api.php[m
+[36m@@ -7,35 +7,26 @@[m
+ use App\Http\Controllers\Api\ProviderController;[m
+ use App\Http\Controllers\Api\ProviderContactController;[m
+ [m
+[31m-/*[m
+[31m-|--------------------------------------------------------------------------[m
+[31m-| API Routes[m
+[31m-|--------------------------------------------------------------------------[m
+[31m-| Aquí registras las rutas de tu API.[m
+[31m-|--------------------------------------------------------------------------[m
+[31m-*/[m
+[31m-[m
+ // ✅ Login público (sin token)[m
+ Route::post('auth/login', [AuthController::class, 'login']);[m
+ [m
+ // 🔒 Todo lo demás requiere token (Sanctum)[m
+ Route::middleware('auth:sanctum')->group(function () {[m
+ [m
+[31m-    // Usuario autenticado (opcional, útil para probar)[m
+[32m+[m[32m    // Usuario autenticado (opcional)[m
+     Route::get('/user', function (Request $request) {[m
+         return $request->user();[m
+     });[m
+ [m
+[31m-    // Endpoints de auth[m
+[32m+[m[32m    // Auth[m
+     Route::get('auth/me', [AuthController::class, 'me']);[m
+     Route::post('auth/logout', [AuthController::class, 'logout']);[m
+ [m
+     // Proveedores[m
+     Route::apiResource('providers', ProviderController::class);[m
+ [m
+[31m-    // Contactos (nested + shallow)[m
+[31m-    // - GET/POST /api/providers/{provider}/contacts[m
+[31m-    // - GET/PUT/DELETE /api/contacts/{contact}[m
+[32m+[m[32m    // Contactos:[m
+[32m+[m[32m    // GET/POST   /api/providers/{provider}/contacts[m
+[32m+[m[32m    // GET/PUT/DEL /api/contacts/{contact}[m
+     Route::apiResource('providers.contacts', ProviderContactController::class)->shallow();[m
+ });[m
+[31m-[m
